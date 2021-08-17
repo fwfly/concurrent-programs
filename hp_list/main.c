@@ -139,14 +139,35 @@ struct list_hp {
 };
 
 static thread_local int tid_v = TID_UNKNOWN;
-static atomic_int_fast32_t tid_v_base = ATOMIC_VAR_INIT(0);
+static atomic_int_fast32_t insert_tid_v_base = ATOMIC_VAR_INIT(0);
+static atomic_int_fast32_t del_tid_v_base = ATOMIC_VAR_INIT(0);
 static inline int tid(void)
 {
-    if (tid_v == TID_UNKNOWN) {
+    /*if (tid_v == TID_UNKNOWN) {
         tid_v = atomic_fetch_add(&tid_v_base, 1);
+        assert(tid_v < HP_MAX_THREADS);
+    }*/
+    return tid_v;
+}
+
+static inline int get_insert_tid(void){
+
+    if (tid_v == TID_UNKNOWN) {
+        tid_v = atomic_fetch_add(&insert_tid_v_base, 1);
         assert(tid_v < HP_MAX_THREADS);
     }
     return tid_v;
+
+}
+
+static inline int get_del_tid(void){
+
+    if (tid_v == TID_UNKNOWN) {
+        tid_v = atomic_fetch_add(&del_tid_v_base, 1);
+        assert(tid_v < HP_MAX_THREADS);
+    }
+    return tid_v;
+
 }
 
 /* Create a new hazard pointer array of size 'max_hps' (or a reasonable
@@ -457,6 +478,7 @@ static uintptr_t elements[MAX_THREADS + 1][N_ELEMENTS];
 static void *insert_thread(void *arg)
 {
     list_t *list = (list_t *) arg;
+    get_insert_tid();
 
     for (size_t i = 0; i < N_ELEMENTS; i++)
         (void) list_insert(list, (uintptr_t) &elements[tid()][i]);
@@ -466,6 +488,7 @@ static void *insert_thread(void *arg)
 static void *delete_thread(void *arg)
 {
     list_t *list = (list_t *) arg;
+    get_del_tid();
 
     for (size_t i = 0; i < N_ELEMENTS; i++)
         (void) list_delete(list, (uintptr_t) &elements[tid()][i]);
@@ -486,8 +509,9 @@ int main(void)
     for (size_t i = 0; i < N_THREADS; i++)
         pthread_join(thr[i], NULL);
 
+    get_del_tid();
     for (size_t i = 0; i < N_ELEMENTS; i++) {
-        for (size_t j = 0; j < tid_v_base; j++)
+        for (size_t j = 0; j < insert_tid_v_base; j++)
             list_delete(list, (uintptr_t) &elements[j][i]);
     }
 
